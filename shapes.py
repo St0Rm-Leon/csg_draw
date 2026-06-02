@@ -1,6 +1,3 @@
-import numpy as np 
-import matplotlib.pyplot as plt 
-
 class Const:
     def __init__(self, num):
         self._CONST = num
@@ -9,6 +6,8 @@ class Const:
     def get(self):
         return self._CONST 
 
+
+# Planes
 class Plane:                                   # Plane: Ax+By+Cz=D 
     def __init__(self, a, b, c, d):
         self.a = a 
@@ -50,25 +49,89 @@ class ZPlane(Plane):                           # XPlane: Cz=D
         super().__init__(0, 0, c, d)
         if c == 0:
             raise ValueError("there should be an C in Cz=D")
-        self.z0 = self.c/self.d  
+        self.z0 = self.d/self.c  
 
     def is_inside(self, px0, py0, pz0):
         return pz0 >= self.z0
 
 
-class Sphere:                                  # Sphere: (x-A)^2+(y-b)^2+(z-c)^2=r^2
+class Sphere:                                  # Sphere: (x-x0)^2+(y-y0)^2+(z-z0)^2=r^2
     def __init__(self, x0, y0, z0, r):
         self.x0 = x0 
         self.y0 = y0  
         self.z0 = z0 
         self.r = r
+        self.r_sq = r**2
 
+    def is_inside(self, px0, py0, pz0):
+        return ((self.x0-px0)**2+(self.y0-py0)**2+(self.z0-pz0)**2) < self.r_sq
+        # We define INSIDE as inside the real spherical surface
+
+
+# Spheres
 class OSphere(Sphere):                         # OSphere: x^2+y^2+z^2=r^2
     def __init__(self, r):
         super().__init__(0, 0, 0, r)
 
-class XSphere(Sphere):
+    def is_inside(self, px0, py0, pz0):
+        return (px0**2+py0**2+pz0**2) < self.r_sq
+
+
+class XSphere(Sphere):                         # XSphere: (x-x0)^2+y^2+z^2=r^2
     def __init__(self, x0, r):
         super().__init__(x0, 0, 0, r)
+
+    def is_inside(self, px0, py0, pz0):
+        return ((self.x0-px0)**2+py0**2+pz0**2) < self.r_sq 
+
+
+class YSphere(Sphere):
+    def __init__(self, y0, r):
+        super().__init__(0, y0, 0, r)
+
+    def is_inside(self, px0, py0, pz0):
+        return (px0**2+(self.y0-py0)**2+pz0**2) < self.r_sq
+
+
+class ZSphere(Sphere):
+    def __init__(self, z0, r):
+        super().__init__(0, 0, z0, r)
+
+    def is_inside(self, px0, py0, pz0):
+        return (px0**2+py0**2+(self.z0-pz0)**2) < self.r_sq
+
+
+# Cylinders
+class XCylinder:
+    def __init__(self, y0, z0, r):
+        self.y0 = y0
+        self.z0 = z0
+        self.r = r
+        self.r_sq = r**2
+
+    def is_inside(self, px0, py0, pz0):
+        return ((self.y0-py0)**2+(self.z0-pz0)**2) < self.r_sq 
+
+
+class YCylinder:
+    def __init__(self, x0, z0, r):
+        self.x0 = x0 
+        self.z0 = z0
+        self.r = r
+        self.r_sq = r**2
+
+    def is_inside(self, px0, py0, pz0):
+        return ((self.x0-px0)**2+(self.z0-pz0)**2) < self.r_sq 
+
+
+class ZCylinder: 
+    def __init__(self, x0, y0, r):
+        self.x0 = x0 
+        self.y0 = y0
+        self.r = r
+        self.r_sq = r**2
+
+    def is_inside(self, px0, py0, pz0):
+        return ((self.x0-px0)**2+(self.y0-py0)**2) < self.r_sq 
 
 
