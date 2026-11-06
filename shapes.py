@@ -2,7 +2,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 class SignedShape:
-    def __init__(self, sign:int, shape:'Shape'):
+    def __init__(self, sign: int, shape: 'Shape'):
+        if sign not in (-1, 1):
+            raise ValueError("sign must be +1 or -1")
         self.sign = sign
         self.shape = shape
 
@@ -20,18 +22,19 @@ class Shape(ABC):
 
 
 # Planes
-class Plane(Shape):                                   # Plane: Ax+By+Cz=D 
+class Plane(Shape):                                   # Plane: Ax+By+Cz=D
     def __init__(self, a, b, c, d):
+        if a == 0 and b == 0 and c == 0:
+            raise ValueError("plane normal must be nonzero")
         self.a = a 
         self.b = b 
         self.c = c
         self.d = d
 
     def is_positive(self, px0, py0, pz0):
-        return (px0*self.a + py0*self.b + pz0*self.c) >= self.d  
-        # We define A*px0 + B*py0 + C*pz0 > d
-        # as the point (px0,py0,pz0) is INSIDE the Plane
-        # IN PRACTCE:
+        # Strict positive side: points on the plane are on the
+        # negative side.
+        return (px0*self.a + py0*self.b + pz0*self.c) > self.d
 
 
 class XPlane(Plane):                           # XPlane: Ax=D
@@ -42,33 +45,35 @@ class XPlane(Plane):                           # XPlane: Ax=D
         self.x0 = self.d/self.a
 
     def is_positive(self, px0, py0, pz0):
-        return px0 >= self.x0
+        return self.a * px0 > self.d
 
 
-class YPlane(Plane):                           # XPlane: By=D
+class YPlane(Plane):                           # YPlane: By=D
     def __init__(self, b, d):
         super().__init__(0, b, 0, d)
         if b == 0:
-            raise ValueError("there should be an B in By=D")
+            raise ValueError("there should be a B in By=D")
         self.y0 = self.d/self.b
 
     def is_positive(self, px0, py0, pz0):
-        return py0 >= self.y0
+        return self.b * py0 > self.d
 
 
-class ZPlane(Plane):                           # XPlane: Cz=D
+class ZPlane(Plane):                           # ZPlane: Cz=D
     def __init__(self, c, d):
         super().__init__(0, 0, c, d)
         if c == 0:
-            raise ValueError("there should be an C in Cz=D")
+            raise ValueError("there should be a C in Cz=D")
         self.z0 = self.d/self.c  
 
     def is_positive(self, px0, py0, pz0):
-        return pz0 >= self.z0
+        return self.c * pz0 > self.d
 
 
 class Sphere(Shape):                                  # Sphere: (x-x0)^2+(y-y0)^2+(z-z0)^2=r^2
     def __init__(self, x0, y0, z0, r):
+        if r <= 0:
+            raise ValueError("sphere radius must be positive")
         self.x0 = x0 
         self.y0 = y0  
         self.z0 = z0 
@@ -76,8 +81,8 @@ class Sphere(Shape):                                  # Sphere: (x-x0)^2+(y-y0)^
         self.r_sq = r**2
 
     def is_positive(self, px0, py0, pz0):
+        # Positive sense is outside the sphere.
         return ((self.x0-px0)**2+(self.y0-py0)**2+(self.z0-pz0)**2) > self.r_sq
-        # We define INSIDE as inside the real spherical surface
 
 
 # Spheres
@@ -116,6 +121,8 @@ class ZSphere(Sphere):
 # Cylinders
 class XCylinder(Shape):
     def __init__(self, y0, z0, r):
+        if r <= 0:
+            raise ValueError("cylinder radius must be positive")
         self.y0 = y0
         self.z0 = z0
         self.r = r
@@ -127,6 +134,8 @@ class XCylinder(Shape):
 
 class YCylinder(Shape):
     def __init__(self, x0, z0, r):
+        if r <= 0:
+            raise ValueError("cylinder radius must be positive")
         self.x0 = x0 
         self.z0 = z0
         self.r = r
@@ -138,6 +147,8 @@ class YCylinder(Shape):
 
 class ZCylinder(Shape): 
     def __init__(self, x0, y0, r):
+        if r <= 0:
+            raise ValueError("cylinder radius must be positive")
         self.x0 = x0 
         self.y0 = y0
         self.r = r
@@ -147,16 +158,44 @@ class ZCylinder(Shape):
         return ((self.x0-px0)**2+(self.y0-py0)**2) > self.r_sq 
 
 
+# MCNP-style axis-centered cylinders
+class CX(XCylinder):
+    def __init__(self, r):
+        super().__init__(0, 0, r)
+
+
+class CY(YCylinder):
+    def __init__(self, r):
+        super().__init__(0, 0, r)
+
+
+class CZ(ZCylinder):
+    def __init__(self, r):
+        super().__init__(0, 0, r)
+
+
 # Cones, K/X, K/Y, K/Z 
 # KX, KY, KZ are just special K/* 
 class Cone(Shape):
     def __init__(self, x0, y0, z0, t_sq, k=1):
+        if t_sq <= 0:
+            raise ValueError("t_sq must be positive")
+        if k not in (-1, 1):
+            raise ValueError("k must be +1 or -1")
         self.x0 = x0
         self.y0 = y0
         self.z0 = z0 
         self.t_sq = t_sq
         self.k = k
         self.t = t_sq ** 0.5
+
+    def _outside(self, u, rad_sq):
+        # MCNP selects one nappe with k: k*u >= 0 is the valid sheet.
+        # Points on the other nappe are outside the cone.
+        cone_sq = (self.t * u) ** 2
+        return ((self.k * u < 0) |
+                ((self.k * u >= 0) & (rad_sq > cone_sq)))
+
     @abstractmethod
     def is_positive(self, px0, py0, pz0):
         pass
@@ -164,33 +203,54 @@ class Cone(Shape):
 class XCone(Cone):
     def __init__(self, x0, y0, z0, t_sq, k=1):
         super().__init__(x0, y0, z0, t_sq, k)
+
     def is_positive(self, px0, py0, pz0):
-        lsq = (self.y0-py0)**2+(self.z0-pz0)**2 
-        ursq = (self.t*(self.x0-px0))**2
-        srsq = self.k*self.t*(self.x0-px0)
-        return ( (srsq < 0) | ( (srsq>=0) & (ursq > lsq)))
+        u = px0 - self.x0
+        rad_sq = (py0 - self.y0)**2 + (pz0 - self.z0)**2
+        return self._outside(u, rad_sq)
 
 class YCone(Cone):
     def __init__(self, x0, y0, z0, t_sq, k=1):
         super().__init__(x0, y0, z0, t_sq, k)
+
     def is_positive(self, px0, py0, pz0):
-        lsq = (self.x0-px0)**2+(self.z0-pz0)**2 
-        ursq = (self.t*(self.y0-py0))**2
-        srsq = self.k*self.t*(self.y0-py0)
-        return ( (srsq < 0) | ( (srsq>=0) & (ursq > lsq)))
+        u = py0 - self.y0
+        rad_sq = (px0 - self.x0)**2 + (pz0 - self.z0)**2
+        return self._outside(u, rad_sq)
 
 class ZCone(Cone):
     def __init__(self, x0, y0, z0, t_sq, k=1):
         super().__init__(x0, y0, z0, t_sq, k)
-    def is_positive(self, px0, py0, pz0):
-        lsq = (self.x0-px0)**2+(self.y0-py0)**2 
-        ursq = (self.t*(self.z0-pz0))**2
-        srsq = self.k*self.t*(self.z0-pz0)
-        return ( (srsq < 0) | ((srsq>=0) & (ursq > lsq)))
 
-# Ellipse, Hyperboloid, Paraboloid...
-class Ellipse(Shape):
+    def is_positive(self, px0, py0, pz0):
+        u = pz0 - self.z0
+        rad_sq = (px0 - self.x0)**2 + (py0 - self.y0)**2
+        return self._outside(u, rad_sq)
+
+
+# MCNP-style axis-centered cones
+class KX(XCone):
+    def __init__(self, x0, t_sq, k=1):
+        super().__init__(x0, 0, 0, t_sq, k)
+
+
+class KY(YCone):
+    def __init__(self, y0, t_sq, k=1):
+        super().__init__(0, y0, 0, t_sq, k)
+
+
+class KZ(ZCone):
+    def __init__(self, z0, t_sq, k=1):
+        super().__init__(0, 0, z0, t_sq, k)
+
+# SQ: ellipsoid, hyperboloid, paraboloid or cylinder with axes
+# parallel to x, y, or z.
+# A*(x-x0)^2 + B*(y-y0)^2 + C*(z-z0)^2
+# + 2*D*(x-x0) + 2*E*(y-y0) + 2*F*(z-z0) + G = 0
+class SQ(Shape):
     def __init__(self, A, B, C, D, E, F, G, x0, y0, z0):
+        if all(value == 0 for value in (A, B, C, D, E, F, G)):
+            raise ValueError("SQ coefficients must not all be zero")
         self.A = A
         self.B = B 
         self.C = C 
@@ -203,17 +263,24 @@ class Ellipse(Shape):
         self.z0 = z0 
 
     def is_positive(self, px0, py0, pz0):
-        dx = self.x0-px0
-        dy = self.y0-py0
-        dz = self.z0-pz0
+        dx = px0 - self.x0
+        dy = py0 - self.y0
+        dz = pz0 - self.z0
         return (
                 self.A*dx**2 + self.B*dy**2 + self.C*dz**2 +
-                2*self.D*dx + 2*self.E*dy + 2*self.F*dz + self.G >0
+                2*self.D*dx + 2*self.E*dy + 2*self.F*dz + self.G > 0
                 )
+
+
+# Backward-compatible alias: the old name described only one of the
+# surfaces covered by SQ.
+Ellipse = SQ
 
 # universal func
 class General(Shape):
     def __init__(self, A, B, C, D, E, F, G, H, J, K):
+        if all(value == 0 for value in (A, B, C, D, E, F, G, H, J, K)):
+            raise ValueError("GQ coefficients must not all be zero")
         self.A = A
         self.B = B 
         self.C = C 
@@ -236,6 +303,8 @@ class General(Shape):
 # Torus
 class Torus(Shape):
     def __init__(self, x0, y0, z0, A, B, C):
+        if A <= 0 or B <= 0 or C <= 0:
+            raise ValueError("torus radii must be positive")
         self.x0 = x0
         self.y0 = y0 
         self.z0 = z0
